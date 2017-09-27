@@ -103,9 +103,6 @@ that would constantly interact with the environment and tell it what to do.  Thi
 
 
 
-def choose_action(pi_values):
-    return np.random.choice(range(len(pi_values)), p=pi_values)
-
 def env_runner(env, policy, num_local_steps, summary_writer, render):
     """
 The logic of the thread runner.  In brief, it constantly keeps on running
@@ -124,9 +121,9 @@ runner appends the policy to the queue.
         for _ in range(num_local_steps):
             fetched = policy.act(last_state, *last_features)
             action, value_, features = fetched[0], fetched[1], fetched[2:]
+            
             # argmax to convert from one-hot
-            action = choose_action(action)
-            state, reward, terminal, info = env.step(action)
+            state, reward, terminal, info = env.step(action.argmax())
             if render:
                 env.render()
 
