@@ -126,7 +126,7 @@ Setting up Tensorflow for data parallel work
                              'rewarders to use (e.g. -r vnc://localhost:5900+15900,vnc://localhost:5901+15901)')
 
     # Add visualisation argument
-    parser.add_argument('--visualise', action='store_true',
+    parser.add_argument('--visualise', action='store_false',
                         help="Visualise the gym environment by running env.render() between each timestep")
 
     args = parser.parse_args()
