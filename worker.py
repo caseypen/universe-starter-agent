@@ -24,7 +24,9 @@ class FastSaver(tf.train.Saver):
 
 def run(args, server):
     env = create_env(args.env_id, client_id=str(args.task), remotes=args.remotes)
-    trainer = A3C(env, args.task, args.visualise)
+    num_global_steps = 100000000
+    initial_learning_rate = 7e-4
+    trainer = A3C(env, args.task, args.visualise,initial_learning_rate, num_global_steps)
 
     # Variable names that start with "local" are not saved in checkpoints.
     if use_tf12_api:

@@ -159,7 +159,7 @@ runner appends the policy to the queue.
         yield rollout
 
 class A3C(object):
-    def __init__(self, env, task, visualise):
+    def __init__(self, env, task, visualise, initial_learning_rate, max_global_time_step):
         """
 An implementation of the A3C algorithm that is reasonably well-tuned for the VNC environments.
 Below, we will have a modest amount of complexity due to the way TensorFlow handles data parallelism.
@@ -169,6 +169,8 @@ should be computed.
 
         self.env = env
         self.task = task
+        self.initial_lr = initial_learning_rate
+        self.max_global_step = max_global_time_step
         worker_device = "/job:worker/task:{}/cpu:0".format(task)
         with tf.device(tf.train.replica_device_setter(1, worker_device=worker_device)):
             with tf.variable_scope("global"):
@@ -187,7 +189,8 @@ should be computed.
 
             log_prob_tf = tf.nn.log_softmax(pi.logits)
             prob_tf = tf.nn.softmax(pi.logits)
-
+            self.LR = tf.placeholder(tf.float32, [])
+            
             # the "policy gradients" loss:  its derivative is precisely the policy gradient
             # notice that self.ac is a placeholder that is provided externally.
             # adv will contain the advantages, as calculated in process_rollout
@@ -238,7 +241,8 @@ should be computed.
             inc_step = self.global_step.assign_add(tf.shape(pi.x)[0])
 
             # each worker has a different set of adam optimizer parameters
-            opt = tf.train.AdamOptimizer(1e-4)
+            # opt = tf.train.AdamOptimizer(1e-4)
+            opt = tf.train.RMSPropOptimizer(learning_rate=self.LR, decay=0.99, epsilon=1e-5)
             self.train_op = tf.group(opt.apply_gradients(grads_and_vars), inc_step)
             self.summary_writer = None
             self.local_steps = 0
@@ -258,6 +262,11 @@ self explanatory:  take a rollout from the queue of the thread runner.
             except queue.Empty:
                 break
         return rollout
+    def _anneal_learning_rate(self, global_time_step):
+        learning_rate = self.initial_lr * (self.max_global_step - global_time_step) / self.max_global_step
+        if learning_rate < 0.0:
+            learning_rate = 0.0
+        return learning_rate
 
     def process(self, sess):
         """
@@ -276,6 +285,10 @@ server.
             fetches = [self.summary_op, self.train_op, self.global_step]
         else:
             fetches = [self.train_op, self.global_step]
+        global_time_step = sess.run(self.global_step)
+        cur_learning_rate = self._anneal_learning_rate(global_time_step)
+        print("global time step is %d, learning rate %f" % (global_time_step, cur_learning_rate))
+        
 
         feed_dict = {
             self.local_network.x: batch.si,
@@ -284,6 +297,7 @@ server.
             self.r: batch.r,
             self.local_network.state_in[0]: batch.features[0],
             self.local_network.state_in[1]: batch.features[1],
+            self.LR: cur_learning_rate,
         }
 
         fetched = sess.run(fetches, feed_dict=feed_dict)
